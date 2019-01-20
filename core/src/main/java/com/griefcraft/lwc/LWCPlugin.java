@@ -96,8 +96,17 @@ public class LWCPlugin extends JavaPlugin {
             } else if (commandName.equals("cdonation")) {
                 aliasCommand = "create";
                 aliasArgs = ("donation " + argString).split(" ");
+            } else if (commandName.equals("ccopy")) {
+                aliasCommand = "copy";
+                aliasArgs = argString.isEmpty() ? new String[0] : argString.split(" ");
             } else if (commandName.equals("cmodify")) {
                 aliasCommand = "modify";
+                aliasArgs = argString.isEmpty() ? new String[0] : argString.split(" ");
+            } else if (commandName.equals("cmodifyall")) {
+                aliasCommand = "modifyall";
+                aliasArgs = argString.isEmpty() ? new String[0] : argString.split(" ");
+            } else if (commandName.equals("cmodifynear")) {
+                aliasCommand = "modifynear";
                 aliasArgs = argString.isEmpty() ? new String[0] : argString.split(" ");
             } else if (commandName.equals("cinfo")) {
                 aliasCommand = "info";

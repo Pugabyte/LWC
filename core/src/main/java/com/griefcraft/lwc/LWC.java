@@ -65,7 +65,6 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
 import org.mcstats.Metrics;
 
-import com.griefcraft.bukkit.EntityBlock;
 import com.griefcraft.cache.ProtectionCache;
 import com.griefcraft.integration.ICurrency;
 import com.griefcraft.integration.IPermissions;
@@ -76,7 +75,6 @@ import com.griefcraft.integration.permissions.VaultPermissions;
 import com.griefcraft.io.BackupManager;
 import com.griefcraft.listeners.LWCMCPCSupport;
 import com.griefcraft.migration.ConfigPost300;
-import com.griefcraft.migration.DatabaseUpgradeManager;
 import com.griefcraft.migration.MySQLPost200;
 import com.griefcraft.model.Flag;
 import com.griefcraft.model.History;
@@ -104,6 +102,7 @@ import com.griefcraft.modules.admin.AdminVersion;
 import com.griefcraft.modules.admin.AdminView;
 import com.griefcraft.modules.admin.BaseAdminModule;
 import com.griefcraft.modules.confirm.ConfirmModule;
+import com.griefcraft.modules.copy.CopyModule;
 import com.griefcraft.modules.create.CreateModule;
 import com.griefcraft.modules.credits.CreditsModule;
 import com.griefcraft.modules.debug.DebugModule;
@@ -121,7 +120,9 @@ import com.griefcraft.modules.modes.BaseModeModule;
 import com.griefcraft.modules.modes.DropTransferModule;
 import com.griefcraft.modules.modes.NoSpamModule;
 import com.griefcraft.modules.modes.PersistModule;
+import com.griefcraft.modules.modify.ModifyAllModule;
 import com.griefcraft.modules.modify.ModifyModule;
+import com.griefcraft.modules.modify.ModifyNearModule;
 import com.griefcraft.modules.owners.OwnersModule;
 import com.griefcraft.modules.pluginsupport.Towny;
 import com.griefcraft.modules.pluginsupport.WorldGuard;
@@ -249,9 +250,6 @@ public class LWC {
      * @return
      */
     public static String materialToString(Block block) {
-        if (block instanceof EntityBlock) {
-            return entityToString(((EntityBlock) block).getEntityType());
-        }
         return materialToString(block.getType());
     }
 
@@ -260,9 +258,6 @@ public class LWC {
      */
     @Deprecated
     public static String materialToString(int id) {
-        if (id > EntityBlock.ENTITY_BLOCK_ID) {
-            return entityToString(EntityType.fromId(id - EntityBlock.ENTITY_BLOCK_ID));
-        }
         return materialToString(getInstance().getPhysicalDatabase().getType(id));
     }
 
@@ -489,10 +484,6 @@ public class LWC {
      * @return remaining items (if any)
      */
     public Map<Integer, ItemStack> depositItems(Block block, ItemStack itemStack) {
-        if (block == null || block instanceof EntityBlock) {
-            return Collections.singletonMap(0, itemStack);
-        }
-
         BlockState blockState;
 
         if ((blockState = block.getState()) != null && (blockState instanceof InventoryHolder)) {
@@ -740,19 +731,6 @@ public class LWC {
         }
 
         return hasAccess;
-    }
-
-    /**
-     * Enforce access to a protected entity
-     *
-     * @param player
-     * @param protection
-     * @param entity
-     * @param hasAccess
-     * @return true if the player was granted access
-     */
-    public boolean enforceAccess(Player player, Protection protection, Entity entity, boolean hasAccess) {
-        return enforceAccess(player, protection, new EntityBlock(entity), hasAccess);
     }
 
     /**
@@ -1398,9 +1376,6 @@ public class LWC {
     public boolean isProtectable(Block block) {
         if (block == null) {
             return false;
-        } else if (block instanceof EntityBlock) {
-            EntityType type = ((EntityBlock) block).getEntityType();
-            return type != null && Boolean.parseBoolean(resolveProtectionConfiguration(type, "enabled"));
         }
 
         Material material = block.getType();
@@ -1493,10 +1468,6 @@ public class LWC {
      * @return
      */
     public String resolveProtectionConfiguration(Block block, String node) {
-        if (block instanceof EntityBlock) {
-            return resolveProtectionConfiguration(((EntityBlock) block).getEntityType(), node);
-        }
-
         Material material = block.getType();
         String cacheKey = block.getData() + "-" + material.toString() + "-" + node;
         if (protectionConfigurationCache.containsKey(cacheKey)) {
@@ -1676,9 +1647,6 @@ public class LWC {
 
         // check any major conversions
         new MySQLPost200().run();
-        
-        // check for version conversion
-        DatabaseUpgradeManager.run();
 
         // precache protections
         physicalDatabase.precache();
@@ -1759,7 +1727,10 @@ public class LWC {
         registerModule(new LimitsV2());
         registerModule(new LimitsModule());
         registerModule(new CreateModule());
+        registerModule(new CopyModule());
         registerModule(new ModifyModule());
+        registerModule(new ModifyAllModule());
+        registerModule(new ModifyNearModule());
         registerModule(new DestroyModule());
         registerModule(new FreeModule());
         registerModule(new InfoModule());

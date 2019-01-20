@@ -28,7 +28,6 @@
 
 package com.griefcraft.modules.limits;
 
-import com.griefcraft.bukkit.EntityBlock;
 import com.griefcraft.lwc.LWC;
 import com.griefcraft.scripting.JavaModule;
 import com.griefcraft.scripting.event.LWCCommandEvent;
@@ -85,11 +84,6 @@ public class LimitsV2 extends JavaModule {
      */
     private final Map<String, Material> materialCache = new HashMap<String, Material>();
 
-    /**
-     * A map mapping string representations of entity types to their EntityType counterpart
-     */
-    private final Map<String, EntityType> entityCache = new HashMap<>();
-
     {
         for (Material material : Material.values()) {
             String materialName = LWC.normalizeMaterialName(material);
@@ -101,11 +95,6 @@ public class LimitsV2 extends JavaModule {
             if (!materialName.equals(material.toString().toLowerCase())) {
                 materialCache.put(material.toString().toLowerCase(), material);
             }
-        }
-
-        for (EntityType entityType : EntityType.values()) {
-            entityCache.put(entityType.toString().toLowerCase(), entityType);
-            entityCache.put(String.valueOf(EntityBlock.ENTITY_BLOCK_ID + entityType.getTypeId()), entityType);
         }
     }
 
@@ -202,37 +191,6 @@ public class LimitsV2 extends JavaModule {
 
     }
 
-    public final class EntityLimit extends Limit {
-
-        /**
-         * The block material to limit
-         */
-        private final EntityType entityType;
-
-        public EntityLimit( EntityType entityType, int limit) {
-            super(limit);
-            this.entityType = entityType;
-        }
-
-        @Override
-        public int getProtectionCount(Player player) {
-            return LWC.getInstance().getPhysicalDatabase().getProtectionCount(player.getName(), EntityBlock.ENTITY_BLOCK_ID + entityType.getTypeId());
-        }
-
-        @Override
-        public String getTypeName() {
-            return entityType.toString();
-        }
-
-        /**
-         * @return
-         */
-        public EntityType getEntityType() {
-            return entityType;
-        }
-
-    }
-
     public final class SignLimit extends Limit {
 
         public SignLimit(int limit) {
@@ -282,12 +240,7 @@ public class LimitsV2 extends JavaModule {
 
         LWC lwc = event.getLWC();
         Player player = event.getPlayer();
-        String typeName;
-        if (event.getBlock() instanceof EntityBlock) {
-            typeName = ((EntityBlock) event.getBlock()).getEntityType().toString();
-        } else {
-            typeName = event.getBlock().getType().toString();
-        }
+        String typeName = event.getBlock().getType().toString();
 
         if (hasReachedLimit(player, typeName)) {
             lwc.sendLocale(player, "protection.exceeded");
@@ -384,9 +337,6 @@ public class LimitsV2 extends JavaModule {
             } else if (limit instanceof BlockLimit) {
                 BlockLimit blockLimit = (BlockLimit) limit;
                 sender.sendMessage(LWC.materialToString(blockLimit.getMaterial()) + ": " + colour + currentProtected + stringLimit);
-            } else if (limit instanceof EntityLimit) {
-                EntityLimit entityLimit = (EntityLimit) limit;
-                sender.sendMessage(LWC.entityToString(entityLimit.getEntityType()) + ": " + colour + currentProtected + stringLimit);
             } else if (limit instanceof SignLimit) {
                 sender.sendMessage("Sign: " + colour + currentProtected + stringLimit);
             } else {
@@ -463,12 +413,6 @@ public class LimitsV2 extends JavaModule {
                 if (material != null) {
                     limits.add(new BlockLimit(material, count));
                 }
-
-                EntityType entityType = entityCache.get(matchName);
-                if (entityType != null) {
-                    limits.add(new EntityLimit(entityType, count));
-                }
-
             }
         }
 
@@ -684,15 +628,9 @@ public class LimitsV2 extends JavaModule {
             } else if (key.equalsIgnoreCase("sign")) {
                 limits.add(new SignLimit(limit));
             } else {
-                // resolve the type
                 Material material = materialCache.get(key);
                 if (material != null) {
                     limits.add(new BlockLimit(material, limit));
-                }
-
-                EntityType entityType = entityCache.get(key);
-                if (entityType != null) {
-                    limits.add(new EntityLimit(entityType, limit));
                 }
             }
         }

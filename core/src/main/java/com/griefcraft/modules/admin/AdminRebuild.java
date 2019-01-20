@@ -28,7 +28,6 @@
 
 package com.griefcraft.modules.admin;
 
-import com.griefcraft.bukkit.EntityBlock;
 import com.griefcraft.lwc.LWC;
 import com.griefcraft.model.History;
 import com.griefcraft.model.Protection;
@@ -186,11 +185,6 @@ public class AdminRebuild extends JavaModule {
         Server server = Bukkit.getServer();
 
         for (World world : server.getWorlds()) {
-            if (x > EntityBlock.POSITION_OFFSET && y > EntityBlock.POSITION_OFFSET && z > EntityBlock.POSITION_OFFSET) {
-                //TODO: Add ability to rebuild block entities
-                continue;
-            }
-
             Block block = world.getBlockAt(x, y, z);
 
             if (lwc.isProtectable(block)) {

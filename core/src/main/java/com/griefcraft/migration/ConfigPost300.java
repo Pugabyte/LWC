@@ -31,17 +31,12 @@ package com.griefcraft.migration;
 import com.griefcraft.lwc.LWC;
 import com.griefcraft.modules.pluginsupport.WorldGuard;
 import com.griefcraft.util.LegacyMaterials;
-
 import org.bukkit.Material;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
+import java.util.*;
 import java.util.logging.Logger;
 
 public class ConfigPost300 implements MigrationUtility {

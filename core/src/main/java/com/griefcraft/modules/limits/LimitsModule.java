@@ -28,7 +28,6 @@
 
 package com.griefcraft.modules.limits;
 
-import com.griefcraft.bukkit.EntityBlock;
 import com.griefcraft.lwc.LWC;
 import com.griefcraft.scripting.JavaModule;
 import com.griefcraft.scripting.event.LWCProtectionRegisterEvent;
@@ -223,13 +222,7 @@ public class LimitsModule extends JavaModule {
             return globalLimit;
         }
 
-        int blockLimit;
-        // Try the block id now
-        if (block instanceof EntityBlock) {
-            blockLimit = searchPermissionsForInteger(player, PERMISSION_NODE_ENTITY + ((EntityBlock) block).getEntityType().toString().toLowerCase() + ".");
-        } else {
-            blockLimit = searchPermissionsForInteger(player, PERMISSION_NODE_BLOCK + block.getType().toString().toLowerCase() + ".");
-        }
+        int blockLimit = searchPermissionsForInteger(player, PERMISSION_NODE_BLOCK + block.getType().toString().toLowerCase() + ".");
 
         if (blockLimit != -1) {
             return blockLimit;
@@ -247,12 +240,7 @@ public class LimitsModule extends JavaModule {
 
                 // and now try the name
                 if (limit == -1 && block.getType() != Material.AIR) {
-                    String name;
-                    if (block instanceof EntityBlock) {
-                        name = ((EntityBlock) block).getEntityType().toString().toLowerCase();
-                    } else {
-                        name = StringUtils.replace(block.getType().toString().toLowerCase(), "block", "");
-                    }
+                    String name = StringUtils.replace(block.getType().toString().toLowerCase(), "block", "");
 
                     if (name.endsWith("_")) {
                         name = name.substring(0, name.length() - 1);

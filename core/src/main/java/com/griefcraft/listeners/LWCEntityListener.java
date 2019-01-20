@@ -28,37 +28,21 @@
 
 package com.griefcraft.listeners;
 
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-
-import com.griefcraft.bukkit.EntityBlock;
 import com.griefcraft.lwc.LWC;
 import com.griefcraft.lwc.LWCPlugin;
 import com.griefcraft.model.Flag;
 import com.griefcraft.model.Protection;
-import com.griefcraft.scripting.event.LWCProtectionRegisterEvent;
-import com.griefcraft.scripting.event.LWCProtectionRegistrationPostEvent;
-
-import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.Material;
 import org.bukkit.block.Block;
-import org.bukkit.block.BlockFace;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityBreakDoorEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.EntityInteractEvent;
-import org.bukkit.event.hanging.HangingPlaceEvent;
-import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.event.vehicle.VehicleCreateEvent;
-import org.bukkit.inventory.ItemStack;
+
+import java.util.HashMap;
+import java.util.Map;
 
 public class LWCEntityListener implements Listener {
 
@@ -137,143 +121,6 @@ public class LWCEntityListener implements Listener {
                     protection.remove();
                 }
             }
-        }
-    }
-
-    @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
-    public void onHangingPlace(HangingPlaceEvent event) {
-        if (!LWC.ENABLED || event.isCancelled()) {
-            return;
-        }
-
-        Player player = event.getPlayer();
-        Entity block = event.getEntity();
-
-        entityCreatedByPlayer(block, player);
-    }
-
-    @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
-    public void onPlayerInteract(PlayerInteractEvent event) {
-        if (!LWC.ENABLED || event.isCancelled()) {
-            return;
-        }
-
-        final ItemStack inHand = event.getItem();
-        if (inHand != null &&
-            (inHand.getType() == Material.ARMOR_STAND
-             || inHand.getType() == Material.MINECART
-             || inHand.getType() == Material.HOPPER_MINECART
-             || inHand.getType() == Material.CHEST_MINECART)) {
-            // actual location of an armor stand is x+0.5 z+0.5 from the air block coords
-            // minecarts spawn at y+0.0625, though
-            final Location l = event.getClickedBlock().getRelative(inHand.getType() == Material.ARMOR_STAND ? event.getBlockFace() : BlockFace.SELF).getLocation();
-            playerCreatedEntities.put(event.getPlayer().getName(), l);
-        }
-    }
-
-    private void checkCreation(final Entity entity) {
-        if (!LWC.ENABLED) {
-            return;
-        }
-
-        final Location loc = entity.getLocation();
-        Iterator<Map.Entry<String, Location>> iter = playerCreatedEntities.entrySet().iterator();
-        while (iter.hasNext()) {
-            Map.Entry<String, Location> entry = iter.next();
-            if (entry.getValue().getWorld().equals(loc.getWorld()) && entry.getValue().distanceSquared(loc) < 1) {
-                iter.remove();
-
-                Player player = Bukkit.getPlayerExact(entry.getKey());
-                if (player != null) {
-                    entityCreatedByPlayer(entity, player);
-                    break;
-                }
-            }
-        }
-    }
-
-    @EventHandler(ignoreCancelled = true)
-    public void onMinecartCreate(VehicleCreateEvent event) {
-        checkCreation(event.getVehicle());
-    }
-
-    @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
-    public void onCreateSpawn(CreatureSpawnEvent event) {
-        checkCreation(event.getEntity());
-    }
-
-    @EventHandler
-    public void onPlayerQuit(PlayerQuitEvent event) {
-        playerCreatedEntities.remove(event.getPlayer().getName());
-    }
-
-    private void entityCreatedByPlayer(Entity entity, Player player) {
-        LWC lwc = plugin.getLWC();
-
-        Protection current = lwc.findProtection(entity.getLocation());
-        if (current != null) {
-            if (!current.isBlockInWorld()) {
-                lwc.log("Removing corrupted protection: " + current);
-                current.remove();
-            } else {
-                if (current.getProtectionFinder() != null) {
-                    current.getProtectionFinder().fullMatchBlocks();
-                    lwc.getProtectionCache().addProtection(current);
-                }
-                return;
-            }
-        }
-
-        if (!lwc.isProtectable(entity.getType())) {
-            return;
-        }
-
-        String autoRegisterType = lwc.resolveProtectionConfiguration(entity.getType(), "autoRegister");
-
-        if ((!autoRegisterType.equalsIgnoreCase("private"))
-            && (!autoRegisterType.equalsIgnoreCase("public"))) {
-            return;
-        }
-
-        if (!lwc.hasPermission(player, "lwc.create." + autoRegisterType, "lwc.create", "lwc.protect")) {
-            return;
-        }
-
-        Protection.Type type;
-
-        try {
-            type = Protection.Type.valueOf(autoRegisterType.toUpperCase());
-        } catch (IllegalArgumentException e) {
-            player.sendMessage("§4LWC_INVALID_CONFIG_autoRegister");
-            return;
-        }
-
-        try {
-            LWCProtectionRegisterEvent evt = new LWCProtectionRegisterEvent(player, EntityBlock.getEntityBlock(entity));
-            lwc.getModuleLoader().dispatchEvent(evt);
-
-            if (evt.isCancelled()) {
-                return;
-            }
-
-            int hash = EntityBlock.calcHash(entity.getUniqueId().hashCode());
-            Protection protection = lwc.getPhysicalDatabase().registerProtection(
-                    EntityBlock.ENTITY_BLOCK_ID + entity.getType().getTypeId(), type,
-                    entity.getWorld().getName(),
-                    player.getUniqueId().toString(), "", hash, hash, hash);
-
-            if (!Boolean.parseBoolean(lwc.resolveProtectionConfiguration(entity.getType(), "quiet"))) {
-                lwc.sendLocale(player, "protection.onplace.create.finalize",
-                        "type", lwc.getPlugin().getMessageParser().parseMessage(autoRegisterType.toLowerCase()),
-                        "block", LWC.entityToString(entity.getType()));
-            }
-
-            if (protection != null) {
-                lwc.getModuleLoader().dispatchEvent(new LWCProtectionRegistrationPostEvent(protection));
-            }
-        } catch (Exception e) {
-            lwc.sendLocale(player, "protection.internalerror", "id", "PLAYER_INTERACT");
-            e.printStackTrace();
         }
     }
 }
