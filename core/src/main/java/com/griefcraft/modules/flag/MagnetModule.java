@@ -28,7 +28,6 @@
 
 package com.griefcraft.modules.flag;
 
-import com.griefcraft.bukkit.EntityBlock;
 import com.griefcraft.lwc.LWC;
 import com.griefcraft.model.Flag;
 import com.griefcraft.model.Protection;
@@ -43,7 +42,6 @@ import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Item;
-import org.bukkit.event.block.BlockEvent;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 
