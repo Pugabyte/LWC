@@ -28,6 +28,7 @@
 
 package com.griefcraft.modules.flag;
 
+import com.griefcraft.bukkit.EntityBlock;
 import com.griefcraft.lwc.LWC;
 import com.griefcraft.model.Flag;
 import com.griefcraft.model.Protection;
@@ -42,14 +43,11 @@ import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Item;
+import org.bukkit.event.block.BlockEvent;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 
-import java.util.ArrayList;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Queue;
+import java.util.*;
 
 public class MagnetModule extends JavaModule {
 
@@ -63,7 +61,7 @@ public class MagnetModule extends JavaModule {
     /**
      * The item blacklist
      */
-    private List<Integer> itemBlacklist;
+    private Set<Material> itemBlacklist;
 
     /**
      * The radius around the container in which to suck up items
@@ -101,7 +99,7 @@ public class MagnetModule extends JavaModule {
                         ItemStack stack = item.getItemStack();
 
                         // check if it is in the blacklist
-                        if (itemBlacklist.contains(stack.getTypeId())) {
+                        if (itemBlacklist.contains(stack.getType())) {
                             continue;
                         }
 
@@ -133,10 +131,10 @@ public class MagnetModule extends JavaModule {
 
                         for (Protection protection : protections) {
                             if (protection.hasFlag(Flag.Type.MAGNET)) {
-                                protection.getBlock();
+                                Block block = protection.getBlock();
 
                                 // we only want inventory blocks
-                                if (!(protection.getBlock().getState() instanceof InventoryHolder)) {
+                                if (block == null || !(block.getState() instanceof InventoryHolder)) { // TODO: optimize, Block#getState is slow as it creates a new BlockState object on each call
                                     continue;
                                 }
 
@@ -157,16 +155,16 @@ public class MagnetModule extends JavaModule {
 
             while ((node = items.poll()) != null) {
                 Item item = node.item;
+                if (item.isDead()) {
+                    continue;
+                }
+
                 Protection protection = node.protection;
 
                 World world = item.getWorld();
                 ItemStack itemStack = item.getItemStack();
                 Location location = item.getLocation();
                 Block block = protection.getBlock();
-
-                if (item.isDead()) {
-                    continue;
-                }
 
                 // Remove the items and suck them up :3
                 Map<Integer, ItemStack> remaining;
@@ -187,7 +185,7 @@ public class MagnetModule extends JavaModule {
                 if (remaining.size() == 1) {
                     ItemStack other = remaining.values().iterator().next();
 
-                    if (itemStack.getTypeId() == other.getTypeId() && itemStack.getAmount() == other.getAmount()) {
+                    if (itemStack.getType() == other.getType() && itemStack.getAmount() == other.getAmount()) {
                         continue;
                     }
                 }
@@ -237,7 +235,7 @@ public class MagnetModule extends JavaModule {
     @Override
     public void load(LWC lwc) {
         enabled = configuration.getBoolean("magnet.enabled", false);
-        itemBlacklist = new ArrayList<Integer>();
+        itemBlacklist = new HashSet<>();
         radius = configuration.getInt("magnet.radius", 3);
         perSweep = configuration.getInt("magnet.perSweep", 20);
 
@@ -252,7 +250,7 @@ public class MagnetModule extends JavaModule {
             Material material = Material.matchMaterial(item);
 
             if (material != null) {
-                itemBlacklist.add(material.getId());
+                itemBlacklist.add(material);
             }
         }
 

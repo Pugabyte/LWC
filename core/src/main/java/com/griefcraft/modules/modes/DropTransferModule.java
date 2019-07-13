@@ -143,7 +143,7 @@ public class DropTransferModule extends JavaModule {
 
         if (protection == null) {
             lwc.sendLocale(player, "lwc.nolongerexists");
-            player.disableMode(player.getMode("dropTransfer"));
+            player.disableMode(player.getMode("+dropTransfer"));
             return;
         }
 
@@ -152,18 +152,18 @@ public class DropTransferModule extends JavaModule {
 
         if (world == null) {
             lwc.sendLocale(player, "lwc.invalidworld");
-            player.disableMode(player.getMode("dropTransfer"));
+            player.disableMode(player.getMode("+dropTransfer"));
             return;
         }
 
         // Don't allow them to transfer items across worlds
         if (bPlayer.getWorld() != world && !lwc.getConfiguration().getBoolean("modes.droptransfer.crossWorld", false)) {
             lwc.sendLocale(player, "lwc.dropxfer.acrossworlds");
-            player.disableMode(player.getMode("dropTransfer"));
+            player.disableMode(player.getMode("+dropTransfer"));
             return;
         }
 
-        Block block = world.getBlockAt(protection.getX(), protection.getY(), protection.getZ());
+        Block block = protection.getBlock();
         Map<Integer, ItemStack> remaining = lwc.depositItems(block, itemStack);
         Map<Integer, ItemStack> forceDrop = null;
 
@@ -207,8 +207,8 @@ public class DropTransferModule extends JavaModule {
         if (!canAccess) {
             lwc.sendLocale(player, "protection.interact.dropxfer.noaccess");
         } else {
-            int blockId = protection.getBlockId();
-            if (blockId != Material.CHEST.getId() && blockId != Material.TRAPPED_CHEST.getId()) {
+            Material blockType = protection.getBlockType();
+            if (blockType != Material.CHEST && blockType != Material.TRAPPED_CHEST) {
                 lwc.sendLocale(player, "protection.interact.dropxfer.notchest");
                 player.removeAllActions();
                 event.setResult(Result.CANCEL);
@@ -230,6 +230,8 @@ public class DropTransferModule extends JavaModule {
         }
 
         player.removeAllActions(); // ignore the persist mode
+        // don't allow the block to be interacted with
+        event.setResult(Result.CANCEL);
     }
 
     @Override
@@ -277,7 +279,6 @@ public class DropTransferModule extends JavaModule {
         }
 
         String action = args[1].toLowerCase();
-        String playerName = player.getName();
 
         if (action.equals("select")) {
             if (isPlayerDropTransferring(player)) {

@@ -37,14 +37,14 @@ import com.griefcraft.scripting.event.LWCCommandEvent;
 import com.griefcraft.scripting.event.LWCProtectionRegisterEvent;
 import com.griefcraft.util.Colors;
 import com.griefcraft.util.config.Configuration;
-import com.sk89q.worldedit.BlockVector;
-import com.sk89q.worldedit.Vector;
+import com.sk89q.worldedit.bukkit.BukkitAdapter;
+import com.sk89q.worldedit.math.BlockVector3;
 import com.sk89q.worldguard.LocalPlayer;
-import com.sk89q.worldguard.bukkit.BukkitUtil;
 import com.sk89q.worldguard.bukkit.WorldGuardPlugin;
-import com.sk89q.worldguard.protection.GlobalRegionManager;
+import com.sk89q.worldguard.internal.permission.RegionPermissionModel;
 import com.sk89q.worldguard.protection.managers.RegionManager;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
+import com.sk89q.worldguard.protection.regions.RegionQuery;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.command.CommandSender;
@@ -64,14 +64,20 @@ public class WorldGuard extends JavaModule {
     /**
      * The world guard plugin if it is enabled
      */
-    private WorldGuardPlugin worldGuard = null;
+    private WorldGuardPlugin worldGuardPlugin = null;
+
+    /**
+     * WorldGuard
+     */
+    private com.sk89q.worldguard.WorldGuard worldGuard;
 
     @Override
     public void load(LWC lwc) {
         Plugin plugin = lwc.getPlugin().getServer().getPluginManager().getPlugin("WorldGuard");
 
         if (plugin != null) {
-            worldGuard = (WorldGuardPlugin) plugin;
+            worldGuardPlugin = (WorldGuardPlugin) plugin;
+            worldGuard = com.sk89q.worldguard.WorldGuard.getInstance();
         }
     }
 
@@ -99,7 +105,7 @@ public class WorldGuard extends JavaModule {
         event.setCancelled(true);
 
         // check for worldguard
-        if (worldGuard == null) {
+        if (worldGuardPlugin == null) {
             sender.sendMessage(Colors.Red + "WorldGuard is not enabled.");
             return;
         }
@@ -135,10 +141,14 @@ public class WorldGuard extends JavaModule {
             return;
         }
 
-        GlobalRegionManager regions = worldGuard.getGlobalRegionManager();
-
         // get the region manager for the world
-        RegionManager regionManager = regions.get(world);
+        RegionManager regionManager = worldGuard.getPlatform().getRegionContainer().get(BukkitAdapter.adapt(world));
+
+        // has world a region manager?
+        if (regionManager == null) {
+            sender.sendMessage(Colors.Red + "World not managed by WorldGuard");
+            return;
+        }
 
         // try and get the region
         ProtectedRegion region = regionManager.getRegion(regionName);
@@ -148,8 +158,8 @@ public class WorldGuard extends JavaModule {
             return;
         }
 
-        BlockVector minimum = region.getMinimumPoint();
-        BlockVector maximum = region.getMaximumPoint();
+        BlockVector3 minimum = region.getMinimumPoint();
+        BlockVector3 maximum = region.getMaximumPoint();
 
         // Min values
         int minBlockX = minimum.getBlockX();
@@ -164,7 +174,7 @@ public class WorldGuard extends JavaModule {
         // Calculate the amount of the blocks in the region
         int numBlocks = (maxBlockX - minBlockX + 1) * (maxBlockY - minBlockY + 1) * (maxBlockZ - minBlockZ + 1);
 
-        if (args[0].equals("purgeregion")) {
+        if (args[0].equals("purgeregion")) { // TODO: Entity support
             // get all of the protections inside of the region
             List<Protection> protections = lwc.getPhysicalDatabase().loadProtections(world.getName(), minBlockX, maxBlockX, minBlockY, maxBlockY, minBlockZ, maxBlockZ);
 
@@ -174,7 +184,7 @@ public class WorldGuard extends JavaModule {
             }
 
             sender.sendMessage(Colors.Green + "Removed " + protections.size() + " protections from the region " + regionName);
-        } else if (args[0].equals("protectregion")) {
+        } else if (args[0].equals("protectregion")) { // TODO: Entity support
             // The owner to assign to the protections
             String ownerName = "LWCWorldGuard";
 
@@ -198,7 +208,7 @@ public class WorldGuard extends JavaModule {
                         }
 
                         // Protect it!
-                        lwc.getPhysicalDatabase().registerProtection(block.getTypeId(), Protection.Type.PRIVATE, world.getName(),
+                        lwc.getPhysicalDatabase().registerProtection(block.getType(), Protection.Type.PRIVATE, world.getName(),
                                 ownerName, "", x, y, z);
                         registered ++;
                     }
@@ -231,8 +241,7 @@ public class WorldGuard extends JavaModule {
         }
 
         Protection protection = event.getProtection();
-        GlobalRegionManager globalRegionManager = worldGuard.getGlobalRegionManager();
-        LocalPlayer wgPlayer = worldGuard.wrapPlayer(event.getPlayer());
+        LocalPlayer wgPlayer = worldGuardPlugin.wrapPlayer(event.getPlayer());
         for (Permission permission : protection.getPermissions()) {
             if (permission.getType() != Permission.Type.REGION) {
                 continue;
@@ -242,7 +251,7 @@ public class WorldGuard extends JavaModule {
                 // Handle the special value which tells us to not actually look up a region but
                 // check just the player's WG build permissions on the block. It may be in multiple
                 // regions or none; we don't care here. That's WorldGuard's domain.
-                if (!globalRegionManager.canBuild(event.getPlayer(), protection.getBlock())) {
+                if (!canBuild(wgPlayer, protection.getBlock())) {
                     continue;
                 }
             } else if (regionName.startsWith("#")) {
@@ -253,21 +262,28 @@ public class WorldGuard extends JavaModule {
                 continue;
             } else {
                 // Region name specified, go look it up
-                World world;
+                com.sk89q.worldedit.world.World world = null;
                 int c = regionName.indexOf(':');
                 if (c < 0) {
                     // No world specified in ACL. Use the block's world.
-                    world = protection.getBlock().getWorld();
+                    Block block = protection.getBlock();
+                    if (block != null) {
+                        world = BukkitAdapter.adapt(block.getWorld());
+                    }
                 } else {
                     // World specified. Partition the string and look up the world.
                     String worldName = regionName.substring(c + 1);
-                    world = event.getLWC().getPlugin().getServer().getWorld(worldName);
+                    World bukkitWorld = event.getLWC().getPlugin().getServer().getWorld(worldName);
+                    if (bukkitWorld == null) {
+                        continue;
+                    }
+                    world = BukkitAdapter.adapt(bukkitWorld);
                     regionName = regionName.substring(0, c);
                 }
                 if (world == null) {
                     continue;
                 }
-                RegionManager regionManager = globalRegionManager.get(world);
+                RegionManager regionManager = worldGuard.getPlatform().getRegionContainer().get(world);
                 if (regionManager == null) {
                     continue;
                 }
@@ -309,12 +325,14 @@ public class WorldGuard extends JavaModule {
         Block block = event.getBlock();
 
         // Load the region manager for the world
-        GlobalRegionManager globalRegionManager = worldGuard.getGlobalRegionManager();
-        RegionManager regionManager = globalRegionManager.get(block.getWorld());
+        RegionManager regionManager = worldGuard.getPlatform().getRegionContainer().get(BukkitAdapter.adapt(block.getWorld()));
+        if (regionManager == null) {
+            return;
+        }
 
         // Are we enforcing building?
         if (configuration.getBoolean("worldguard.requireBuildRights", true)) {
-            if (!globalRegionManager.canBuild(player, block)) {
+            if (!canBuild(worldGuardPlugin.wrapPlayer(player), block)) {
                 lwc.sendLocale(player, "lwc.worldguard.needbuildrights");
                 event.setCancelled(true);
                 return;
@@ -322,7 +340,7 @@ public class WorldGuard extends JavaModule {
         }
 
         // Create a vector for the region
-        Vector vector = BukkitUtil.toVector(block);
+        BlockVector3 vector = BukkitAdapter.asBlockVector(block.getLocation());
 
         // Load the regions the block encompasses
         List<String> regions = regionManager.getApplicableRegionsIDs(vector);
@@ -345,6 +363,22 @@ public class WorldGuard extends JavaModule {
                 }
             }
         }
+    }
+
+    /**
+     * Check if a player can build in a region
+     *
+     * @param localPlayer
+     * @param block
+     * @return
+     */
+    private boolean canBuild(LocalPlayer localPlayer, Block block) {
+        RegionPermissionModel regionPermissionModel = new RegionPermissionModel(localPlayer);
+        if (regionPermissionModel.mayIgnoreRegionProtection(BukkitAdapter.adapt(block.getWorld()))) {
+            return true;
+        }
+        RegionQuery regionQuery = worldGuard.getPlatform().getRegionContainer().createQuery();
+        return regionQuery.testBuild(BukkitAdapter.adapt(block.getLocation()), localPlayer);
     }
 
     /**

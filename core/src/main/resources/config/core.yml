@@ -57,8 +57,8 @@ optional:
 
     # Blocks that cannot be placed around someone else's protection. This is most useful
     blacklistedBlocks:
-    - 154
-    - 166
+    - hopper
+    - barrier
 
     # Players that are blocked from destroying any blocks protected by LWC. Mainly useful for MCPC
     # where mods can remove blocks and try to break the block by sending an event first (e.g turtle)
@@ -189,9 +189,30 @@ protections:
         fence_gate:
             enabled: true
         "*_fence_gate":
+<<<<<<< HEAD
+            enabled: true
+        "*_shulker_box":
+=======
             enabled: true
         "*_shulker_box":
             enabled: true
+    entities:
+        armor_stand:
+            enabled: true
+            autoRegister: private
+        painting:
+            enabled: true
+            autoRegister: private
+        item_frame:
+            enabled: true
+            autoRegister: private
+        minecart_chest:
+>>>>>>> 4239935067972d014c7fd7f640bb5f4b05fcb6c5
+            enabled: true
+            autoRegister: private
+        minecart_hopper:
+            enabled: true
+            autoRegister: private
 
 modes:
     droptransfer:

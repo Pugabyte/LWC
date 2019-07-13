@@ -33,6 +33,8 @@ import com.griefcraft.model.History;
 import com.griefcraft.model.Protection;
 import com.griefcraft.scripting.JavaModule;
 import com.griefcraft.scripting.event.LWCProtectionDestroyEvent;
+
+import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 
 public class DestroyModule extends JavaModule {
@@ -43,13 +45,19 @@ public class DestroyModule extends JavaModule {
             return;
         }
 
-        if (event.getMethod() != LWCProtectionDestroyEvent.Method.BLOCK_DESTRUCTION) {
+        if (event.getMethod() != LWCProtectionDestroyEvent.Method.BLOCK_DESTRUCTION
+                && event.getMethod() != LWCProtectionDestroyEvent.Method.ENTITY_DESTRUCTION) {
             return;
         }
 
         LWC lwc = event.getLWC();
         Protection protection = event.getProtection();
         Player player = event.getPlayer();
+
+        Block block = protection.getBlock();
+        if (block == null) {
+            throw new NullPointerException("Missing block for protection: " + protection);
+        }
 
         boolean isOwner = protection.isOwner(player);
 
