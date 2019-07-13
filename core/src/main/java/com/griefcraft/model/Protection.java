@@ -28,14 +28,12 @@
 
 package com.griefcraft.model;
 
+import com.griefcraft.bukkit.EntityBlock;
 import com.griefcraft.cache.ProtectionCache;
 import com.griefcraft.lwc.LWC;
 import com.griefcraft.scripting.event.LWCProtectionRemovePostEvent;
-import com.griefcraft.util.Colors;
-import com.griefcraft.util.ProtectionFinder;
-import com.griefcraft.util.StringUtil;
-import com.griefcraft.util.TimeUtil;
-import com.griefcraft.util.UUIDRegistry;
+import com.griefcraft.util.*;
+
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -54,6 +52,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import javax.annotation.Nullable;
 
 public class Protection {
 
@@ -466,15 +465,15 @@ public class Protection {
     public Flag getFlag(Flag.Type type) {
         return flags.get(type);
     }
-
-    /**
-     * Get a copy of the flags for the current protection
-     *
-     * @return
-     */
-    public Map<Flag.Type, Flag> getFlags() {
-        return Collections.unmodifiableMap(flags);
-    }
+	
+	/**
+	 * Get a copy of the flags for the current protection
+	 * 
+	 * @return 
+	 */
+	public Map<Flag.Type, Flag> getFlags() {
+		return Collections.unmodifiableMap(flags);
+	}
 
     /**
      * Add a flag to the protection
@@ -658,19 +657,11 @@ public class Protection {
      */
     public boolean isBlockInWorld() {
         Block block = getBlock();
-
-        switch (block.getType()) {
-            case FURNACE:
-            case BURNING_FURNACE:
-                return blockId == Material.FURNACE.getId() || blockId == Material.BURNING_FURNACE.getId();
-
-            case STEP:
-            case DOUBLE_STEP:
-                    return blockId == Material.STEP.getId() || blockId == Material.DOUBLE_STEP.getId();
-
-            default:
-                return blockId == block.getTypeId();
+        if (block == null) {
+            return false;
         }
+
+        return getBlockType() == block.getType();
     }
 
     public JSONObject getData() {
@@ -679,6 +670,10 @@ public class Protection {
 
     public int getBlockId() {
         return blockId;
+    }
+
+    public Material getBlockType() {
+        return LWC.getInstance().getPhysicalDatabase().getType(blockId);
     }
 
     public String getPassword() {
@@ -838,6 +833,7 @@ public class Protection {
      *
      * @return the ProtectionFinder used to create this protection
      */
+    @Nullable
     public ProtectionFinder getProtectionFinder() {
         return finder;
     }
@@ -972,6 +968,7 @@ public class Protection {
     /**
      * @return the Bukkit world the protection should be located in
      */
+    @Nullable
     public World getBukkitWorld() {
         if (world == null || world.isEmpty()) {
             return Bukkit.getServer().getWorlds().get(0);
@@ -983,16 +980,21 @@ public class Protection {
     /**
      * @return the Bukkit Player object of the owner
      */
+    @Nullable
     public Player getBukkitOwner() {
         return Bukkit.getServer().getPlayer(owner);
     }
 
     /**
-     * @return the block representing the protection in the world
+     * Gets the block in the world representing this protection.
+     * @return the block or null if the world does not exist
      */
+    @Nullable
     public Block getBlock() {
         if (cachedBlock != null) {
             return cachedBlock;
+        } else if(getBlockId() > EntityBlock.ENTITY_BLOCK_ID) {
+            return cachedBlock = new EntityBlock(world, getBlockId(), x);
         }
 
         World world = getBukkitWorld();
@@ -1006,7 +1008,7 @@ public class Protection {
     }
 
     /**
-     * @return
+     * {@inheritDoc}
      */
     @Override
     public String toString() {

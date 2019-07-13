@@ -29,12 +29,17 @@
 package com.griefcraft.modules.info;
 
 import com.griefcraft.lwc.LWC;
-import com.griefcraft.model.*;
+import com.griefcraft.model.Action;
+import com.griefcraft.model.Flag;
+import com.griefcraft.model.LWCPlayer;
+import com.griefcraft.model.Permission;
+import com.griefcraft.model.Protection;
 import com.griefcraft.scripting.JavaModule;
 import com.griefcraft.scripting.event.LWCBlockInteractEvent;
 import com.griefcraft.scripting.event.LWCCommandEvent;
 import com.griefcraft.scripting.event.LWCProtectionInteractEvent;
 import com.griefcraft.util.StringUtil;
+import java.util.Set;
 import org.bukkit.block.Block;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -59,7 +64,6 @@ public class InfoModule extends JavaModule {
         event.setResult(Result.CANCEL);
 
         String type = lwc.getPlugin().getMessageParser().parseMessage(protection.typeToString().toLowerCase());
-
         Set<Flag.Type> flags = protection.getFlags().keySet();
         StringBuilder flagStr = new StringBuilder();
         int nFlags = flags.size();

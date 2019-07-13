@@ -25,40 +25,10 @@
  * authors and contributors and should not be interpreted as representing official policies,
  * either expressed or implied, of anybody else.
  */
-
 package com.griefcraft.lwc;
 
-import java.io.IOException;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
-import com.griefcraft.modules.copy.CopyModule;
-import com.griefcraft.modules.modify.ModifyNearModule;
-import org.apache.commons.lang.StringUtils;
-import org.apache.commons.lang.WordUtils;
-import org.bukkit.Bukkit;
-import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.World;
-import org.bukkit.block.Block;
-import org.bukkit.block.BlockFace;
-import org.bukkit.block.BlockState;
-import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Player;
-import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.InventoryHolder;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.plugin.Plugin;
-
+import com.griefcraft.bukkit.EntityBlock;
+import com.griefcraft.cache.MaterialCache;
 import com.griefcraft.cache.ProtectionCache;
 import com.griefcraft.integration.ICurrency;
 import com.griefcraft.integration.IPermissions;
@@ -69,33 +39,16 @@ import com.griefcraft.integration.permissions.VaultPermissions;
 import com.griefcraft.io.BackupManager;
 import com.griefcraft.listeners.LWCMCPCSupport;
 import com.griefcraft.migration.ConfigPost300;
+import com.griefcraft.migration.DatabaseUpgradeManager;
 import com.griefcraft.migration.MySQLPost200;
 import com.griefcraft.model.Flag;
 import com.griefcraft.model.History;
 import com.griefcraft.model.LWCPlayer;
 import com.griefcraft.model.Permission;
 import com.griefcraft.model.Protection;
-import com.griefcraft.modules.admin.AdminBackup;
-import com.griefcraft.modules.admin.AdminCache;
-import com.griefcraft.modules.admin.AdminCleanup;
-import com.griefcraft.modules.admin.AdminClear;
-import com.griefcraft.modules.admin.AdminDump;
-import com.griefcraft.modules.admin.AdminExpire;
-import com.griefcraft.modules.admin.AdminFind;
-import com.griefcraft.modules.admin.AdminFlush;
-import com.griefcraft.modules.admin.AdminForceOwner;
-import com.griefcraft.modules.admin.AdminLocale;
-import com.griefcraft.modules.admin.AdminPurge;
-import com.griefcraft.modules.admin.AdminPurgeBanned;
-import com.griefcraft.modules.admin.AdminQuery;
-import com.griefcraft.modules.admin.AdminRebuild;
-import com.griefcraft.modules.admin.AdminReload;
-import com.griefcraft.modules.admin.AdminRemove;
-import com.griefcraft.modules.admin.AdminReport;
-import com.griefcraft.modules.admin.AdminVersion;
-import com.griefcraft.modules.admin.AdminView;
-import com.griefcraft.modules.admin.BaseAdminModule;
+import com.griefcraft.modules.admin.*;
 import com.griefcraft.modules.confirm.ConfirmModule;
+import com.griefcraft.modules.copy.CopyModule;
 import com.griefcraft.modules.create.CreateModule;
 import com.griefcraft.modules.credits.CreditsModule;
 import com.griefcraft.modules.debug.DebugModule;
@@ -113,8 +66,9 @@ import com.griefcraft.modules.modes.BaseModeModule;
 import com.griefcraft.modules.modes.DropTransferModule;
 import com.griefcraft.modules.modes.NoSpamModule;
 import com.griefcraft.modules.modes.PersistModule;
-import com.griefcraft.modules.modify.ModifyModule;
 import com.griefcraft.modules.modify.ModifyAllModule;
+import com.griefcraft.modules.modify.ModifyModule;
+import com.griefcraft.modules.modify.ModifyNearModule;
 import com.griefcraft.modules.owners.OwnersModule;
 import com.griefcraft.modules.pluginsupport.Towny;
 import com.griefcraft.modules.pluginsupport.WorldGuard;
@@ -130,9 +84,46 @@ import com.griefcraft.scripting.event.LWCReloadEvent;
 import com.griefcraft.scripting.event.LWCSendLocaleEvent;
 import com.griefcraft.sql.Database;
 import com.griefcraft.sql.PhysDB;
-import com.griefcraft.util.*;
+import com.griefcraft.util.Closer;
+import com.griefcraft.util.Colors;
+import com.griefcraft.util.DatabaseThread;
+import com.griefcraft.util.ProtectionFinder;
+import com.griefcraft.util.Statistics;
+import com.griefcraft.util.StringUtil;
+import com.griefcraft.util.UUIDRegistry;
 import com.griefcraft.util.config.Configuration;
 import com.griefcraft.util.matchers.DoubleChestMatcher;
+import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang.WordUtils;
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.World;
+import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
+import org.bukkit.block.BlockState;
+import org.bukkit.block.data.type.Chest;
+import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryHolder;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.Plugin;
+
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 public class LWC {
 
@@ -165,6 +156,11 @@ public class LWC {
      * The protection cache
      */
     private final ProtectionCache protectionCache;
+
+    /**
+     * The type id mapping cache
+     */
+    private final MaterialCache materialCache;
 
     /**
      * Physical database instance
@@ -213,6 +209,7 @@ public class LWC {
         fastHoppers = configuration.getBoolean("optional.fastHopperProtection", false);
         alternativeHoppers = configuration.getBoolean("optional.alternativeHopperProtection", false);
         protectionCache = new ProtectionCache(this);
+        materialCache = new MaterialCache(this);
         backupManager = new BackupManager();
         moduleLoader = new ModuleLoader(this);
     }
@@ -227,13 +224,27 @@ public class LWC {
     }
 
     /**
-     * Get a string representation of a block type
+     * Get a string representation of a block's material
      *
-     * @param id
+     * @param block
      * @return
      */
+    public static String materialToString(Block block) {
+        if (block instanceof EntityBlock) {
+            return entityToString(((EntityBlock) block).getEntityType());
+        }
+        return materialToString(block.getType());
+    }
+
+    /**
+     * Get a string representation of a block type
+     */
+    @Deprecated
     public static String materialToString(int id) {
-        return materialToString(Material.getMaterial(id));
+        if (id > EntityBlock.ENTITY_BLOCK_ID) {
+            return entityToString(EntityType.fromId(id - EntityBlock.ENTITY_BLOCK_ID));
+        }
+        return materialToString(getInstance().getPhysicalDatabase().getType(id));
     }
 
     /**
@@ -257,6 +268,29 @@ public class LWC {
             return WordUtils.capitalize(locale.replace("_", " "));
         }
 
+        return "";
+    }
+
+    /**
+     * Get a string representation of an entity
+     *
+     * @param type
+     * @return
+     */
+    public static String entityToString(EntityType type) {
+        if (type != null) {
+            String materialName = type.name().toLowerCase();
+
+            // attempt to match the locale
+            String locale = LWC.getInstance().getPlugin().getMessageParser().parseMessage(materialName.toLowerCase());
+
+            // if it starts with UNKNOWN_LOCALE, use the default material name
+            if (locale == null) {
+                locale = materialName;
+            }
+
+            return WordUtils.capitalize(locale.replace("_", " "));
+        }
         return "";
     }
 
@@ -298,35 +332,16 @@ public class LWC {
             return;
         }
 
+        Chest chest = (Chest) block.getBlockData();
+        chest.setFacing(face);
+        block.setBlockData(chest);
+
         // Is there a double chest?
         Block doubleChest = findAdjacentDoubleChest(block);
-
-        // Calculate the data byte to set
-        byte data = 0;
-
-        switch (face) {
-            case NORTH:
-                data = 4;
-                break;
-
-            case SOUTH:
-                data = 5;
-                break;
-
-            case EAST:
-                data = 2;
-                break;
-
-            case WEST:
-                data = 3;
-                break;
-        }
-
-        // set the data for both sides of the chest
-        block.setData(data);
-
         if (doubleChest != null) {
-            doubleChest.setData(data);
+            Chest other = (Chest) doubleChest.getBlockData();
+            other.setFacing(face);
+            doubleChest.setBlockData(other);
         }
     }
 
@@ -448,14 +463,17 @@ public class LWC {
     }
 
     /**
-     * Deposit items into an inventory chest
-     * Works with double chests.
+     * Deposit items into an inventory chest Works with double chests.
      *
      * @param block
      * @param itemStack
      * @return remaining items (if any)
      */
     public Map<Integer, ItemStack> depositItems(Block block, ItemStack itemStack) {
+        if (block == null || block instanceof EntityBlock) {
+            return Collections.singletonMap(0, itemStack);
+        }
+
         BlockState blockState;
 
         if ((blockState = block.getState()) != null && (blockState instanceof InventoryHolder)) {
@@ -464,7 +482,7 @@ public class LWC {
 
             if (DoubleChestMatcher.PROTECTABLES_CHESTS.contains(block.getType())) {
                 doubleChestBlock = findAdjacentDoubleChest(block);
-            } else if (block.getType() == Material.FURNACE || block.getType() == Material.BURNING_FURNACE) {
+            } else if (block.getType() == Material.FURNACE) {
                 Inventory inventory = holder.getInventory();
 
                 if (inventory.getItem(0) != null && inventory.getItem(1) != null) {
@@ -483,7 +501,7 @@ public class LWC {
             }
 
             if (itemStack.getAmount() <= 0) {
-                return new HashMap<Integer, ItemStack>();
+                return new HashMap<>();
             }
 
             Map<Integer, ItemStack> remaining = holder.getInventory().addItem(itemStack);
@@ -506,7 +524,7 @@ public class LWC {
             }
         }
 
-        return new HashMap<Integer, ItemStack>();
+        return new HashMap<>();
     }
 
     /**
@@ -533,7 +551,8 @@ public class LWC {
     }
 
     /**
-     * Find a block that is adjacent to another block on any of the block's 6 sides given a Material
+     * Find a block that is adjacent to another block on any of the block's 6
+     * sides given a Material
      *
      * @param block
      * @param material
@@ -556,7 +575,8 @@ public class LWC {
     }
 
     /**
-     * Find a protection that is adjacent to another block on any of the block's 6 sides
+     * Find a protection that is adjacent to another block on any of the block's
+     * 6 sides
      *
      * @param block
      * @param ignore
@@ -634,9 +654,12 @@ public class LWC {
             return true;
         }
 
+        int legacyId = block instanceof EntityBlock ? ((EntityBlock) block).getTypeId() :
+				LWC.getInstance().getPhysicalDatabase().getTypeId(block.getType());
+
         // support for old protection dbs that do not contain the block id
-        if (protection.getBlockId() <= 0 && block.getTypeId() != protection.getBlockId()) {
-            protection.setBlockId(block.getTypeId());
+        if (protection.getBlockId() <= 0 && legacyId != protection.getBlockId()) {
+            protection.setBlockId(legacyId);
             protection.save();
         }
 
@@ -702,6 +725,19 @@ public class LWC {
     }
 
     /**
+     * Enforce access to a protected entity
+     *
+     * @param player
+     * @param protection
+     * @param entity
+     * @param hasAccess
+     * @return true if the player was granted access
+     */
+    public boolean enforceAccess(Player player, Protection protection, Entity entity, boolean hasAccess) {
+        return enforceAccess(player, protection, new EntityBlock(entity), hasAccess);
+    }
+
+    /**
      * Check if a player has the ability to access a protection
      *
      * @param player
@@ -763,11 +799,20 @@ public class LWC {
                         continue;
                     }
 
+                    // Item in hand
+                    Material inHand = player.getInventory().getItemInMainHand().getType();
+
                     // Get the item they need to have
-                    int item = Integer.parseInt(permission.getName());
+                    Material item = Material.matchMaterial(permission.getName());
+                    if (item == null) {
+                        try {
+                            int itemId = Integer.parseInt(permission.getName());
+                            item = LWC.getInstance().getPhysicalDatabase().getType(itemId);
+                        } catch (NumberFormatException ignored) {}
+                    }
 
                     // Are they wielding it?
-                    if (player.getItemInHand().getTypeId() == item) {
+                    if (inHand == item) {
                         return true;
                     }
                 }
@@ -922,16 +967,6 @@ public class LWC {
     }
 
     /**
-     * Get a string representation of a block's material
-     *
-     * @param block
-     * @return
-     */
-    public static String materialToString(Block block) {
-        return materialToString(block.getType());
-    }
-
-    /**
      * Fast remove all protections for a player. ~100k protections / second.
      *
      * @param sender
@@ -980,8 +1015,8 @@ public class LWC {
 
         try (Closer closer = new Closer()) {
             Statement resultStatement = closer.register(physicalDatabase.getConnection()
-                                                                        .createStatement(ResultSet.TYPE_FORWARD_ONLY,
-                                                                                         ResultSet.CONCUR_READ_ONLY));
+                    .createStatement(ResultSet.TYPE_FORWARD_ONLY,
+                            ResultSet.CONCUR_READ_ONLY));
 
             if (physicalDatabase.getType() == Database.Type.MySQL) {
                 resultStatement.setFetchSize(Integer.MIN_VALUE);
@@ -990,8 +1025,8 @@ public class LWC {
             String prefix = physicalDatabase.getPrefix();
 
             ResultSet result = closer.register(resultStatement.executeQuery(
-                    "SELECT id, owner, type, x, y, z, data, blockId, world, password, date, last_accessed FROM " +
-                    prefix + "protections" + where));
+                    "SELECT id, owner, type, x, y, z, data, blockId, world, password, date, last_accessed FROM "
+                    + prefix + "protections" + where));
             while (result.next()) {
                 Protection protection = physicalDatabase.resolveProtection(result);
                 World world = protection.getBukkitWorld();
@@ -1068,10 +1103,10 @@ public class LWC {
 
                 if (count % 10000 == 0) {
                     deleteProtectionsQuery.append("DELETE FROM ").append(prefix).append("protections WHERE id IN (")
-                                          .append(protectionId);
+                            .append(protectionId);
                     deleteHistoryQuery.append("UPDATE ").append(prefix)
-                                      .append("history SET status = " + History.Status.INACTIVE.ordinal() +
-                                              " WHERE protectionId IN(").append(protectionId);
+                            .append("history SET status = " + History.Status.INACTIVE.ordinal()
+                                    + " WHERE protectionId IN(").append(protectionId);
                 } else {
                     deleteProtectionsQuery.append(",").append(protectionId);
                     deleteHistoryQuery.append(",").append(protectionId);
@@ -1278,7 +1313,8 @@ public class LWC {
     }
 
     /**
-     * Check a player for a node, using a fallback as a default (e.g lwc.protect)
+     * Check a player for a node, using a fallback as a default (e.g
+     * lwc.protect)
      *
      * @param sender
      * @param node
@@ -1342,6 +1378,13 @@ public class LWC {
      * @return
      */
     public boolean isProtectable(Block block) {
+        if (block == null) {
+            return false;
+        } else if (block instanceof EntityBlock) {
+            EntityType type = ((EntityBlock) block).getEntityType();
+            return type != null && Boolean.parseBoolean(resolveProtectionConfiguration(type, "enabled"));
+        }
+
         Material material = block.getType();
 
         if (material == null) {
@@ -1368,6 +1411,63 @@ public class LWC {
     }
 
     /**
+     * Check an entity to see if it is protectable
+     *
+     * @param state
+     * @return
+     */
+    public boolean isProtectable(EntityType state) {
+        if (state == null) {
+            return false;
+        }
+
+        return Boolean.parseBoolean(resolveProtectionConfiguration(state, "enabled"));
+    }
+
+    /**
+     * Get the appropriate config value for the entity (protections.entity.node)
+     *
+     * @param entity
+     * @param node
+     * @return
+     */
+    public String resolveProtectionConfiguration(EntityType entity, String node) {
+        if (entity == null) {
+            return null;
+        }
+        String cacheKey = "ent-" + entity.toString() + "-" + node;
+        if (protectionConfigurationCache.containsKey(cacheKey)) {
+            return protectionConfigurationCache.get(cacheKey);
+        }
+
+        List<String> names = new ArrayList<>();
+
+        String materialName = entity.toString().toLowerCase();
+
+        // add the name & the block id
+        names.add(materialName);
+        names.add(entity.getTypeId() + "");
+
+        // Add the wildcards last so it can be overriden
+        names.add("*");
+
+        // load default
+        String value = configuration.getString("protections." + node);
+
+        // look for this specific item's setting
+        for (String name : names) {
+            String temp = configuration.getString("protections.entities." + name + "." + node);
+
+            if (temp != null && !temp.isEmpty()) {
+                value = temp;
+            }
+        }
+
+        protectionConfigurationCache.put(cacheKey, value);
+        return value;
+    }
+
+    /**
      * Get the appropriate config value for the block (protections.block.node)
      *
      * @param block
@@ -1375,6 +1475,10 @@ public class LWC {
      * @return
      */
     public String resolveProtectionConfiguration(Block block, String node) {
+        if (block instanceof EntityBlock) {
+            return resolveProtectionConfiguration(((EntityBlock) block).getEntityType(), node);
+        }
+
         Material material = block.getType();
         String cacheKey = block.getData() + "-" + material.toString() + "-" + node;
         if (protectionConfigurationCache.containsKey(cacheKey)) {
@@ -1400,7 +1504,7 @@ public class LWC {
         names.add(material.getId() + ":*");
 
         if (materialName.contains("_")) { // Prefix wildcarding for shulker boxes & gates
-        	names.add("*_" + materialName.substring(materialName.indexOf("_") + 1));
+            names.add("*_" + materialName.substring(materialName.indexOf("_") + 1));
         }
 
         String value = configuration.getString("protections." + node);
@@ -1449,6 +1553,9 @@ public class LWC {
         names.add("*");
         names.add(material.getId() + ":*");
 
+        if (materialName.contains("_")) { // Prefix wildcarding for shulker boxes & gates
+            names.add("*_" + materialName.substring(materialName.indexOf("_") + 1));
+        }
         String value = configuration.getString("protections." + node);
 
         for (String name : names) {
@@ -1511,7 +1618,8 @@ public class LWC {
     }
 
     /**
-     * Load sqlite (done only when LWC is loaded so memory isn't used unnecessarily)
+     * Load sqlite (done only when LWC is loaded so memory isn't used
+     * unnecessarily)
      */
     public void load() {
         configuration = Configuration.load("core.yml");
@@ -1541,7 +1649,6 @@ public class LWC {
         }
 
         // plugin.getUpdater().init();
-
         log("Connecting to " + Database.DefaultType);
         try {
             if (!physicalDatabase.connect()) {
@@ -1555,6 +1662,9 @@ public class LWC {
 
         // check any major conversions
         new MySQLPost200().run();
+        
+        // check for version conversion
+        DatabaseUpgradeManager.run();
 
         // precache protections
         physicalDatabase.precache();
@@ -1648,7 +1758,8 @@ public class LWC {
     }
 
     /**
-     * Get a plugin by the name. Does not have to be enabled, and will remain disabled if it is disabled.
+     * Get a plugin by the name. Does not have to be enabled, and will remain
+     * disabled if it is disabled.
      *
      * @param name
      * @return
@@ -1696,7 +1807,8 @@ public class LWC {
     }
 
     /**
-     * Process rights inputted for a protection and add or remove them to the given protection
+     * Process rights inputted for a protection and add or remove them to the
+     * given protection
      *
      * @param sender
      * @param protection
@@ -1953,6 +2065,13 @@ public class LWC {
      */
     public ProtectionCache getProtectionCache() {
         return protectionCache;
+    }
+
+    /**
+     * @return the material cache
+     */
+    public MaterialCache getMaterialCache() {
+        return materialCache;
     }
 
     /**

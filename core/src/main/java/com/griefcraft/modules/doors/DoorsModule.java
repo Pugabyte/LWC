@@ -32,6 +32,7 @@ import org.bukkit.Effect;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.block.data.type.Door;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.EquipmentSlot;
 
@@ -112,7 +113,7 @@ public class DoorsModule extends JavaModule {
 
         // Ignore the off-hand
         if (event.getEvent().getHand() != EquipmentSlot.HAND) {
-        	return;
+            return;
         }
 
         // The more important check
@@ -157,7 +158,7 @@ public class DoorsModule extends JavaModule {
         // toggle the other side of the door open
         // wooden doors and trapdoors open when you right click
         boolean opensWhenClicked = event.getEvent().getAction() == org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK &&
-        		!block.getType().name().contains("IRON");
+                !block.getType().name().contains("IRON");
         changeDoorStates(true, (opensWhenClicked ? null : block), doubleDoorBlock);
 
         // TODO Keep double doors in sync
@@ -199,30 +200,28 @@ public class DoorsModule extends JavaModule {
      */
     private void changeDoorStates(boolean allowDoorToOpen, Block... doors) {
         for (Block door : doors) {
-            if (door == null) {
+            if (door == null || !(door.getBlockData() instanceof Door)) {
                 continue;
             }
 
-            // If we aren't allowing the door to open, check if it's already closed
-            if (!allowDoorToOpen && (door.getData() & 0x4) == 0) {
-                // The door is already closed and we don't want to open it
-                // the bit 0x4 is set when the door is open
+            Door data = (Door) door.getBlockData();
+            if (!allowDoorToOpen && !data.isOpen()) {
                 continue;
             }
 
             // Get the top half of the door
             Block topHalf = door.getRelative(BlockFace.UP);
+            if (topHalf.getBlockData() instanceof Door) {
+                Door topData = (Door) topHalf.getBlockData();
+                topData.setOpen(!data.isOpen());
+                topHalf.setBlockData(topData);
+            }
 
-            // Now xor both data values with 0x4, the flag that states if the door is open
-            door.setData((byte) (door.getData() ^ 0x4));
+            data.setOpen(!data.isOpen());
+            door.setBlockData(data);
 
             // Play the door open/close sound
             door.getWorld().playEffect(door.getLocation(), Effect.DOOR_TOGGLE, 0);
-
-            // Only change the block above it if it is something we can open or close
-            if (isValid(topHalf.getType())) {
-                topHalf.setData((byte) (topHalf.getData() ^ 0x4));
-            }
         }
     }
 
@@ -264,9 +263,9 @@ public class DoorsModule extends JavaModule {
      * @return
      */
     private boolean isValid(Material material) {
-    	return DoorMatcher.DOORS.contains(material)
-    			|| DoorMatcher.FENCE_GATES.contains(material)
-    			|| DoorMatcher.TRAP_DOORS.contains(material);
+        return DoorMatcher.DOORS.contains(material)
+                || DoorMatcher.FENCE_GATES.contains(material)
+                || DoorMatcher.TRAP_DOORS.contains(material);
     }
 
     /**
