@@ -37,14 +37,12 @@ commands:
     permission: lwc.create.password
   cprivate:
     description: Create a protection that only you and specific groups or people can access.
-    usage: /<command> <Users/Groups>
-<<<<<<< HEAD
+    usage: /<command> <Users/Groups
+    permission: lwc.create.private
   ccopy:
     description: Copy a protection's configuration onto another
     usage: /<command>
-=======
-    permission: lwc.create.private
->>>>>>> 4239935067972d014c7fd7f640bb5f4b05fcb6c5
+    permission: lwc.create.copy
   cdonation:
     description: Creates a chest that can be deposited into, but only removed by player with access.
     usage: /<command>
@@ -52,16 +50,15 @@ commands:
   cmodify:
     description: Modify an existing private protection.
     usage: /<command> <Modifications>
-<<<<<<< HEAD
+    permission: lwc.modify
   cmodifyall:
     description: Modify all existing protections.
     usage: /<command> <Modifications>
+    permission: lwc.modify
   cmodifynear:
     description: Modify nearby protections.
     usage: /<command> <radius> <Modifications>
-=======
     permission: lwc.modify
->>>>>>> 4239935067972d014c7fd7f640bb5f4b05fcb6c5
   cunlock:
     description: Unlock a password-protected protection.
     usage: /<command> <password>
